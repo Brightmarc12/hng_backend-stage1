@@ -2,7 +2,7 @@
 
 This project is a RESTful API service built with Node.js and Express that analyzes strings, computes their properties, and provides several endpoints for creating, retrieving, and deleting them. The service is containerized with Docker for consistent deployment.
 
-**Live API Base URL:** `http://<YOUR_AWS_PUBLIC_IP>:3000`
+**Live API Base URL:** `http://13.62.102.112:3000`
 
 ---
 
@@ -29,8 +29,8 @@ This project is containerized, so the only prerequisite is having **Docker** ins
 
 1.  **Clone the repository:**
     ```bash
-    git clone <your-repo-url>
-    cd backend-stage1
+    git clone https://github.com/Brightmarc12/hng_backend-stage1
+    cd hng_backend-stage1
     ```
 
 2.  **Build the Docker image:**
