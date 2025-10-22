@@ -10,44 +10,33 @@ const app = express();
 app.use(express.json());
 
 // --- In-Memory Storage ---
-
-// This Map stores the full data object using the SHA256 hash as the key.
-// Example: 'hash123' -> { id: 'hash123', value: 'hello world', ... }
 const stringsByHash = new Map();
-
-// This Map provides a quick way to look up a hash using the original string value.
-// This is essential for quickly checking if a string already exists.
-// Example: 'hello world' -> 'hash123'
 const hashByValue = new Map();
 
 // --- The Core "Analyzer" Engine ---
-
 function analyzeString(value) {
-  // 1. Calculate the SHA-256 hash of the string. This will be its unique ID.
+  // 1. Calculate the SHA-256 hash of the string.
   const sha256_hash = crypto.createHash('sha256').update(value).digest('hex');
 
-  // 2. Check if the string is a palindrome (reads the same forwards and backwards).
-  // We convert to lowercase to make the comparison case-insensitive.
-  const lowerCaseValue = value.toLowerCase();
-  const reversedValue = lowerCaseValue.split('').reverse().join('');
-  const is_palindrome = lowerCaseValue === reversedValue;
+  // 2. Palindrome Check (IMPROVED LOGIC)
+  // Sanitize the string: convert to lowercase and remove all non-alphanumeric characters.
+  const sanitizedValue = value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const reversedValue = sanitizedValue.split('').reverse().join('');
+  const is_palindrome = sanitizedValue === reversedValue;
 
-  // 3. Count the number of words. We trim whitespace from the ends,
-  // split by one or more whitespace characters, and filter out any empty strings.
+  // 3. Count the number of words.
   const word_count = value.trim().split(/\s+/).filter(Boolean).length;
 
-  // 4. Create a frequency map of each character in the string.
+  // 4. Create a frequency map.
   const character_frequency_map = {};
   for (const char of value) {
-    // For each character, increment its count in the map.
-    // If the character isn't in the map yet, initialize it with 0 before adding 1.
     character_frequency_map[char] = (character_frequency_map[char] || 0) + 1;
   }
 
-  // 5. The number of unique characters is simply the number of keys in our frequency map.
+  // 5. Count unique characters.
   const unique_characters = Object.keys(character_frequency_map).length;
 
-  // 6. Return a final object containing all the calculated properties.
+  // 6. Return the final object.
   return {
     length: value.length,
     is_palindrome,
@@ -59,43 +48,31 @@ function analyzeString(value) {
 }
 
 // --- Natural Language Parsing Helper ---
+function parseNaturalLanguageQuery(query) {
+  const filters = {};
+  const lowerQuery = query.toLowerCase();
 
-
-// --- API Endpoints ---
-
-function analyzeString(value) {
-  // 1. Calculate the SHA-256 hash of the string.
-  const sha256_hash = crypto.createHash('sha256').update(value).digest('hex');
-
-  // 2. Palindrome Check (IMPROVED LOGIC)
-  // Sanitize the string: convert to lowercase and remove all non-alphanumeric characters.
-  const sanitizedValue = value.toLowerCase().replace(/[^a-z0-9]/g, '');
-  // Now, reverse the SANITIZED string.
-  const reversedValue = sanitizedValue.split('').reverse().join('');
-  const is_palindrome = sanitizedValue === reversedValue;
-
-  // 3. Count the number of words. This logic remains the same.
-  const word_count = value.trim().split(/\s+/).filter(Boolean).length;
-
-  // 4. Create a frequency map. This logic remains the same.
-  const character_frequency_map = {};
-  for (const char of value) {
-    character_frequency_map[char] = (character_frequency_map[char] || 0) + 1;
+  if (lowerQuery.includes('palindromic') || lowerQuery.includes('palindrome')) {
+    filters.is_palindrome = true;
   }
-
-  // 5. Count unique characters. This logic remains the same.
-  const unique_characters = Object.keys(character_frequency_map).length;
-
-  // 6. Return the final object.
-  return {
-    length: value.length,
-    is_palindrome, // This will now be correct
-    unique_characters,
-    word_count,
-    sha256_hash,
-    character_frequency_map,
-  };
+  if (lowerQuery.includes('single word') || lowerQuery.includes('one word')) {
+    filters.word_count = 1;
+  }
+  const minLengthMatch = lowerQuery.match(/longer than (\d+)/);
+  if (minLengthMatch && minLengthMatch[1]) {
+    filters.min_length = parseInt(minLengthMatch[1], 10) + 1;
+  }
+  const containsMatch = lowerQuery.match(/contain(?:ing|s) the (?:letter|character) (\w)/);
+  if (containsMatch && containsMatch[1]) {
+    filters.contains_character = containsMatch[1];
+  }
+  if (lowerQuery.includes('first vowel')) {
+    filters.contains_character = 'a';
+  }
+  return filters;
 }
+
+// --- API Endpoints (in correct order) ---
 
 // 1. Create/Analyze a String
 app.post('/strings/?', (req, res) => {
@@ -122,11 +99,7 @@ app.post('/strings/?', (req, res) => {
   return res.status(201).json(newStringData);
 });
 
-
-
-
-
-// 4. Get All Strings, with optional filtering
+// 2. General GET with filters
 app.get('/strings/?', (req, res) => {
   let results = Array.from(stringsByHash.values());
   const filters_applied = {};
@@ -169,7 +142,7 @@ app.get('/strings/?', (req, res) => {
   return res.status(200).json(response);
 });
 
-// 5. Natural Language Filtering
+// 3. Specific Natural Language GET
 app.get('/strings/filter-by-natural-language/?', (req, res) => {
   const { query } = req.query;
   if (!query) {
@@ -203,7 +176,7 @@ app.get('/strings/filter-by-natural-language/?', (req, res) => {
   return res.status(200).json(response);
 });
 
-// 2. Get a Specific String by its value
+// 4. Dynamic GET by value MUST BE LAST
 app.get('/strings/:string_value', (req, res) => {
   const { string_value } = req.params;
   const hash = hashByValue.get(string_value);
@@ -214,8 +187,7 @@ app.get('/strings/:string_value', (req, res) => {
   return res.status(200).json(stringData);
 });
 
-
-// 3. Delete a Specific String by its value
+// 5. Delete a Specific String by its value
 app.delete('/strings/:string_value', (req, res) => {
   const { string_value } = req.params;
   const hash = hashByValue.get(string_value);
@@ -226,10 +198,9 @@ app.delete('/strings/:string_value', (req, res) => {
   hashByValue.delete(string_value);
   return res.status(204).send();
 });
-// Define the port the server will run on.
-const PORT = process.env.PORT || 3000;
 
-// Start the server and listen for incoming connections on the specified port
+// Define and start the server
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
