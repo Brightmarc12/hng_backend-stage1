@@ -60,46 +60,42 @@ function analyzeString(value) {
 
 // --- Natural Language Parsing Helper ---
 
-function parseNaturalLanguageQuery(query) {
-  // Create an empty object to store the filters we find.
-  const filters = {};
-  const lowerQuery = query.toLowerCase();
-
-  // Rule 1: Look for the word "palindrome" or "palindromic".
-  if (lowerQuery.includes('palindromic') || lowerQuery.includes('palindrome')) {
-    filters.is_palindrome = true;
-  }
-
-  // Rule 2: Look for patterns indicating a single word.
-  if (lowerQuery.includes('single word') || lowerQuery.includes('one word')) {
-    filters.word_count = 1;
-  }
-
-  // Rule 3: Look for patterns like "longer than 10 characters".
-  // We use a regular expression to find a number after "longer than".
-  const minLengthMatch = lowerQuery.match(/longer than (\d+)/);
-  if (minLengthMatch && minLengthMatch[1]) {
-    // The result of the match is a string, so we convert it to an integer.
-    // The query says "longer than 10", which means the minimum length is 11.
-    filters.min_length = parseInt(minLengthMatch[1], 10) + 1;
-  }
-
-  // Rule 4: Look for patterns like "containing the letter z".
-  const containsMatch = lowerQuery.match(/contain(?:ing|s) the (?:letter|character) (\w)/);
-  if (containsMatch && containsMatch[1]) {
-    // The result of the match is the single character.
-    filters.contains_character = containsMatch[1];
-  }
-
-  // Rule 5: A special heuristic for a specific phrase.
-  if (lowerQuery.includes('first vowel')) {
-    filters.contains_character = 'a';
-  }
-  
-  return filters;
-}
 
 // --- API Endpoints ---
+
+function analyzeString(value) {
+  // 1. Calculate the SHA-256 hash of the string.
+  const sha256_hash = crypto.createHash('sha256').update(value).digest('hex');
+
+  // 2. Palindrome Check (IMPROVED LOGIC)
+  // Sanitize the string: convert to lowercase and remove all non-alphanumeric characters.
+  const sanitizedValue = value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  // Now, reverse the SANITIZED string.
+  const reversedValue = sanitizedValue.split('').reverse().join('');
+  const is_palindrome = sanitizedValue === reversedValue;
+
+  // 3. Count the number of words. This logic remains the same.
+  const word_count = value.trim().split(/\s+/).filter(Boolean).length;
+
+  // 4. Create a frequency map. This logic remains the same.
+  const character_frequency_map = {};
+  for (const char of value) {
+    character_frequency_map[char] = (character_frequency_map[char] || 0) + 1;
+  }
+
+  // 5. Count unique characters. This logic remains the same.
+  const unique_characters = Object.keys(character_frequency_map).length;
+
+  // 6. Return the final object.
+  return {
+    length: value.length,
+    is_palindrome, // This will now be correct
+    unique_characters,
+    word_count,
+    sha256_hash,
+    character_frequency_map,
+  };
+}
 
 // 1. Create/Analyze a String
 app.post('/strings/?', (req, res) => {
@@ -126,28 +122,9 @@ app.post('/strings/?', (req, res) => {
   return res.status(201).json(newStringData);
 });
 
-// 2. Get a Specific String by its value
-app.get('/strings/:string_value', (req, res) => {
-  const { string_value } = req.params;
-  const hash = hashByValue.get(string_value);
-  if (!hash || !stringsByHash.has(hash)) {
-    return res.status(404).json({ error: 'String does not exist in the system' });
-  }
-  const stringData = stringsByHash.get(hash);
-  return res.status(200).json(stringData);
-});
 
-// 3. Delete a Specific String by its value
-app.delete('/strings/:string_value', (req, res) => {
-  const { string_value } = req.params;
-  const hash = hashByValue.get(string_value);
-  if (!hash || !stringsByHash.has(hash)) {
-    return res.status(404).json({ error: 'String does not exist in the system' });
-  }
-  stringsByHash.delete(hash);
-  hashByValue.delete(string_value);
-  return res.status(204).send();
-});
+
+
 
 // 4. Get All Strings, with optional filtering
 app.get('/strings/?', (req, res) => {
@@ -226,6 +203,29 @@ app.get('/strings/filter-by-natural-language/?', (req, res) => {
   return res.status(200).json(response);
 });
 
+// 2. Get a Specific String by its value
+app.get('/strings/:string_value', (req, res) => {
+  const { string_value } = req.params;
+  const hash = hashByValue.get(string_value);
+  if (!hash || !stringsByHash.has(hash)) {
+    return res.status(404).json({ error: 'String does not exist in the system' });
+  }
+  const stringData = stringsByHash.get(hash);
+  return res.status(200).json(stringData);
+});
+
+
+// 3. Delete a Specific String by its value
+app.delete('/strings/:string_value', (req, res) => {
+  const { string_value } = req.params;
+  const hash = hashByValue.get(string_value);
+  if (!hash || !stringsByHash.has(hash)) {
+    return res.status(404).json({ error: 'String does not exist in the system' });
+  }
+  stringsByHash.delete(hash);
+  hashByValue.delete(string_value);
+  return res.status(204).send();
+});
 // Define the port the server will run on.
 const PORT = process.env.PORT || 3000;
 
